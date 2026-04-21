@@ -17,6 +17,17 @@ log_event() {
   printf '%s\n' "$1" >> "$AUDIT"
 }
 
+# Diagnostic preamble — surfaces mount/UID/env issues when the runner
+# bails early. Kept JSON-structured so the host parser ingests it like
+# any other event.
+log_event "$(printf '{"kind":"runner","detail":{"op":"start","skill_dir":"%s","uid":%s,"gid":%s}}' \
+  "$SKILL_DIR" "$(id -u 2>/dev/null || echo -1)" "$(id -g 2>/dev/null || echo -1)")"
+if [ -d "$SKILL_DIR" ]; then
+  LISTING=$(ls -A "$SKILL_DIR" 2>/dev/null | tr '\n' ' ' | sed 's/"/\\"/g')
+  log_event "$(printf '{"kind":"runner","detail":{"op":"listing","dir":"%s","entries":"%s"}}' \
+    "$SKILL_DIR" "$LISTING")"
+fi
+
 # 1) Start the mock LLM in the background.
 python /opt/clean-skill/mock_llm.py &
 MOCK_PID=$!
