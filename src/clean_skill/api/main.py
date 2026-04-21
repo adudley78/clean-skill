@@ -7,7 +7,10 @@ should be layered on via a reverse proxy.
 
 from __future__ import annotations
 
+import logging
 import tempfile
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
@@ -20,10 +23,41 @@ from ..models import ScanReport
 from ..static_analysis import StaticAnalyzer
 from ..verdict import aggregate
 
+logger = logging.getLogger(__name__)
+
+
+def _run_migrations() -> None:
+    """Apply all pending Alembic migrations.
+
+    Skipped gracefully when no database URL is configured (e.g. CI without a
+    real Postgres instance) so the API can still start for non-DB endpoints.
+    """
+    import os
+
+    from alembic import command
+    from alembic.config import Config
+
+    if not os.environ.get("CLEAN_SKILL_DB_URL"):
+        logger.warning("CLEAN_SKILL_DB_URL is not set; skipping database migrations.")
+        return
+
+    logger.info("Running database migrations...")
+    alembic_cfg = Config("alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Database migrations complete.")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    _run_migrations()
+    yield
+
+
 app = FastAPI(
     title="clean-skill API",
     version="0.1.0",
     description="Scan AI skills for prompt injection, exfiltration, and sandbox escapes.",
+    lifespan=lifespan,
 )
 
 _security = HTTPBearer(auto_error=False)

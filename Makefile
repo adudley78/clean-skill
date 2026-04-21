@@ -1,4 +1,4 @@
-.PHONY: install test test-integration lint typecheck fmt check sandbox-build sandbox-test sandbox clean
+.PHONY: install test test-integration lint typecheck fmt check sandbox-build sandbox-test sandbox clean migrate migration
 
 PYTHON ?= python
 
@@ -58,3 +58,11 @@ sandbox: sandbox-build
 
 clean:
 	rm -rf build dist *.egg-info .pytest_cache .mypy_cache .ruff_cache htmlcov
+
+## Apply all pending Alembic migrations (requires CLEAN_SKILL_DB_URL).
+migrate:
+	alembic upgrade head
+
+## Generate a new migration from model changes: make migration msg="your description"
+migration:
+	alembic revision --autogenerate -m "$(msg)"
