@@ -101,7 +101,12 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+# Integration tests require Docker + the sandbox image; deselected by default.
+# Run them with `pytest -m integration` (and `CLEAN_SKILL_RUN_INTEGRATION=1`).
+addopts = "-ra --strict-markers -m 'not integration'"
+markers = [
+    "integration: end-to-end tests that require Docker and the sandbox image",
+]
 asyncio_mode = "auto"
 
 [tool.coverage.run]

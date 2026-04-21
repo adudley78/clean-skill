@@ -90,6 +90,12 @@ class DynamicAnalyzer:
         except DockerException as exc:
             return self._degraded(f"docker daemon unreachable: {exc}")
 
+        runtime = self._select_runtime(client)
+        if runtime is None:
+            return self._degraded(
+                f"no usable container runtime (requested {self._config.runtime!r})"
+            )
+
         with tempfile.TemporaryDirectory(prefix="cleanskill-") as tmp:
             bundle_dir = Path(tmp) / "bundle"
             bundle_dir.mkdir()
@@ -107,7 +113,7 @@ class DynamicAnalyzer:
                     command=["/opt/clean-skill/runner.sh", "/skill"],
                     detach=True,
                     network_disabled=(self._config.network == "none"),
-                    runtime=self._config.runtime,
+                    runtime=runtime,
                     mem_limit=f"{self._config.memory_mb}m",
                     nano_cpus=int(self._config.cpu_quota * 1_000_000_000),
                     read_only=self._config.read_only_root,
@@ -155,6 +161,41 @@ class DynamicAnalyzer:
         return trace, self._score(skill, trace)
 
     # -- helpers ---------------------------------------------------------
+
+    def _select_runtime(self, client: Any) -> str | None:
+        """Return the best available Docker runtime.
+
+        Strategy:
+
+        1. Prefer the configured runtime (default ``runsc`` / gVisor).
+        2. If unavailable, fall back to ``runc`` with a loud warning. This is
+           strictly weaker isolation (shared host kernel) and is intended
+           only for local dev / CI environments that can't install gVisor
+           (e.g. macOS Docker Desktop, unprivileged Linux runners).
+        3. If ``runc`` is also missing (unusual), return None so the caller
+           degrades gracefully.
+        """
+        want = self._config.runtime
+        try:
+            info = client.info()
+        except Exception as exc:
+            logger.warning("could not query docker info: %s", exc)
+            return want  # let Docker fail loudly if the runtime is bogus
+
+        available = set((info.get("Runtimes") or {}).keys())
+        if want in available:
+            return want
+
+        if "runc" in available:
+            logger.warning(
+                "configured sandbox runtime %r not available on this host; "
+                "falling back to 'runc'. Install gVisor for production isolation: "
+                "https://gvisor.dev/docs/user_guide/install/",
+                want,
+            )
+            return "runc"
+
+        return None
 
     @staticmethod
     def _materialize(skill: Skill, out: Path) -> None:

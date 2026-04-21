@@ -5,9 +5,9 @@
 #   /var/log/cleanskill/audit.jsonl    one JSON event per line
 #   exit code                          0 on clean exit, non-zero on skill error
 #
-# We deliberately use POSIX sh so the sandbox image stays minimal.
+# Runs under POSIX sh; awk parsing uses gawk (installed in the image).
 
-set -eu
+set -u
 
 SKILL_DIR="${1:-/skill}"
 AUDIT="/var/log/cleanskill/audit.jsonl"
@@ -21,58 +21,79 @@ log_event() {
 python /opt/clean-skill/mock_llm.py &
 MOCK_PID=$!
 
-# 2) Pick entrypoint. Platform-specific hints come from env; fall back to common names.
-ENTRY="${CLEAN_SKILL_ENTRYPOINT:-}"
-if [ -z "$ENTRY" ]; then
-  for candidate in "$SKILL_DIR/main.py" "$SKILL_DIR/plugin.py" "$SKILL_DIR/server.py" "$SKILL_DIR/run.sh"; do
+cleanup() {
+  [ -n "${MOCK_PID:-}" ] && kill "$MOCK_PID" 2>/dev/null || true
+  [ -n "${MOCK_PID:-}" ] && wait "$MOCK_PID" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+# 2) Pick entrypoint. Platform-specific hints come from env; fall back to
+#    common names. Store the ABSOLUTE path in $ABS.
+ABS=""
+if [ -n "${CLEAN_SKILL_ENTRYPOINT:-}" ]; then
+  case "$CLEAN_SKILL_ENTRYPOINT" in
+    /*) [ -f "$CLEAN_SKILL_ENTRYPOINT" ] && ABS="$CLEAN_SKILL_ENTRYPOINT" ;;
+    *)  [ -f "$SKILL_DIR/$CLEAN_SKILL_ENTRYPOINT" ] && ABS="$SKILL_DIR/$CLEAN_SKILL_ENTRYPOINT" ;;
+  esac
+fi
+
+if [ -z "$ABS" ]; then
+  for candidate in \
+    "$SKILL_DIR/main.py" \
+    "$SKILL_DIR/plugin.py" \
+    "$SKILL_DIR/server.py" \
+    "$SKILL_DIR/run.sh" \
+    "$SKILL_DIR/skill.py"; do
     if [ -f "$candidate" ]; then
-      ENTRY="$candidate"
+      ABS="$candidate"
       break
     fi
   done
 fi
 
-if [ -z "$ENTRY" ] || [ ! -e "$SKILL_DIR/$ENTRY" ] && [ ! -e "$ENTRY" ]; then
-  log_event '{"kind":"runner","msg":"no entrypoint found"}'
-  kill "$MOCK_PID" 2>/dev/null || true
+if [ -z "$ABS" ]; then
+  log_event '{"kind":"runner","detail":{"msg":"no entrypoint found"}}'
   exit 2
 fi
 
-# Resolve to absolute path inside the bundle.
-case "$ENTRY" in
-  /*) ABS="$ENTRY" ;;
-  *)  ABS="$SKILL_DIR/$ENTRY" ;;
+log_event "$(printf '{"kind":"runner","detail":{"msg":"exec","entry":"%s"}}' "$ABS")"
+
+# Choose interpreter based on extension; fall back to direct exec for shebanged scripts.
+case "$ABS" in
+  *.py) CMD='python "$ABS"' ;;
+  *.sh) CMD='sh "$ABS"' ;;
+  *)    CMD='"$ABS"' ;;
 esac
 
-log_event "$(printf '{"kind":"runner","msg":"exec","entry":"%s"}' "$ABS")"
-
-# 3) strace filters: file writes + process spawns. Output is parsed into JSONL
-#    by a tiny awk filter so we keep everything in one append-only log.
+# 3) strace filters: file writes + process spawns + outbound connects.
+#    We append a single JSON line per interesting syscall to the audit log.
 STRACE_LOG=$(mktemp)
+
+# shellcheck disable=SC2086
 strace -f -qq -e trace=openat,connect,execve -o "$STRACE_LOG" \
-  sh -c 'exec "$0" "$@"' "$ABS" </dev/null >/tmp/skill.stdout 2>/tmp/skill.stderr
+  sh -c "$CMD" </dev/null >/tmp/skill.stdout 2>/tmp/skill.stderr
 RC=$?
 
-awk '
+gawk '
   /execve\(/ {
-    match($0, /"([^"]+)"/, arr);
-    printf("{\"kind\":\"process\",\"detail\":{\"op\":\"execve\",\"argv\":[\"%s\"]}}\n", arr[1]);
+    if (match($0, /"([^"]+)"/, arr))
+      printf("{\"kind\":\"process\",\"detail\":{\"op\":\"execve\",\"argv\":[\"%s\"]}}\n", arr[1]);
     next
   }
   /openat\(.*O_(WRONLY|RDWR|CREAT)/ {
-    match($0, /"([^"]+)"/, arr);
-    printf("{\"kind\":\"filesystem\",\"detail\":{\"op\":\"write\",\"path\":\"%s\"}}\n", arr[1]);
+    if (match($0, /"([^"]+)"/, arr))
+      printf("{\"kind\":\"filesystem\",\"detail\":{\"op\":\"write\",\"path\":\"%s\"}}\n", arr[1]);
     next
   }
   /connect\(/ {
-    match($0, /sin_addr\("([^"]+)"\)/, a);
-    match($0, /sin_port=htons\(([0-9]+)\)/, p);
-    if (a[1] != "") printf("{\"kind\":\"network\",\"detail\":{\"host\":\"%s\",\"port\":%s}}\n", a[1], p[1]);
+    host = ""; port = "";
+    if (match($0, /inet_addr\("([^"]+)"\)/, a)) host = a[1];
+    if (host == "" && match($0, /sin_addr\("([^"]+)"\)/, a)) host = a[1];
+    if (match($0, /sin_port=htons\(([0-9]+)\)/, p))           port = p[1];
+    if (host != "")
+      printf("{\"kind\":\"network\",\"detail\":{\"host\":\"%s\",\"port\":%s}}\n", host, port);
     next
   }
 ' "$STRACE_LOG" >> "$AUDIT" || true
-
-kill "$MOCK_PID" 2>/dev/null || true
-wait "$MOCK_PID" 2>/dev/null || true
 
 exit "$RC"

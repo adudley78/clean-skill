@@ -20,11 +20,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
+# strace: syscall tracing for the audit log.
+# gawk:   match(s, r, a) with capture array is gawk/mawk-3.4+; install gawk
+#         explicitly so runner.sh is deterministic across base-image updates.
+# ca-certificates: TLS bundle for any skill that legitimately needs HTTPS
+#         against the mock LLM (via 127.0.0.1, not egress).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        strace=6.1* \
+        strace \
+        gawk \
         ca-certificates \
-        jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root execution user.
