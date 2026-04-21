@@ -1,0 +1,36 @@
+version: 2
+updates:
+  # Python runtime + dev deps declared in pyproject.toml.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels: ["dependencies", "python"]
+    groups:
+      dev-minor-patch:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+      runtime-minor-patch:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+    # Security scanner: keep pinned majors. Dependabot may still raise major
+    # bumps as individual PRs so we see them, but never auto-group them.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions pins in .github/workflows/*.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "ci"]
+
+  # Base image of the sandbox container.
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies", "docker"]
