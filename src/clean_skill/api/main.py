@@ -25,6 +25,11 @@ from ..verdict import aggregate
 
 logger = logging.getLogger(__name__)
 
+# Resolve the project root from __file__ so the path stays correct
+# regardless of the working directory uvicorn is started from.
+# src/clean_skill/api/main.py -> parents[3] == project root.
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
 
 def _run_migrations() -> None:
     """Apply all pending Alembic migrations.
@@ -42,7 +47,7 @@ def _run_migrations() -> None:
         return
 
     logger.info("Running database migrations...")
-    alembic_cfg = Config("alembic.ini")
+    alembic_cfg = Config(str(_PROJECT_ROOT / "alembic.ini"))
     command.upgrade(alembic_cfg, "head")
     logger.info("Database migrations complete.")
 

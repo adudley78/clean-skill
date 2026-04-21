@@ -24,7 +24,10 @@ class KnownBadSkill(Base):
     __table_args__ = (UniqueConstraint("bundle_sha256", name="uq_known_bad_sha"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    bundle_sha256: Mapped[str] = mapped_column(String(64), index=True, unique=True)
+    # Uniqueness + index come from the named constraint in __table_args__; a
+    # second column-level unique=True would create a second btree index for no
+    # benefit.
+    bundle_sha256: Mapped[str] = mapped_column(String(64))
     platform: Mapped[str] = mapped_column(String(32))
     name: Mapped[str] = mapped_column(String(256))
     version: Mapped[str | None] = mapped_column(String(64), nullable=True)

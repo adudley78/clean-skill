@@ -7,16 +7,19 @@ SQLite compatibility is guaranteed for this baseline migration.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from alembic.command import downgrade, upgrade
 from alembic.config import Config
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 @pytest.fixture()
-def alembic_cfg(tmp_path: pytest.TempPathFactory) -> Config:
-    cfg = Config("alembic.ini")
-    db_path = tmp_path / "test.db"  # type: ignore[operator]
-    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+def alembic_cfg(tmp_path: Path) -> Config:
+    cfg = Config(str(_PROJECT_ROOT / "alembic.ini"))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{tmp_path / 'test.db'}")
     return cfg
 
 
