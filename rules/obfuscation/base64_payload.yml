@@ -1,0 +1,29 @@
+id: CS-OB-001
+name: Base64-Encoded Executable Payload
+description: |
+  Large base64 blobs inside a skill bundle are a red flag: they commonly hide
+  shell commands, downloader stubs, or extra instructions the agent will
+  decode at runtime. We decode candidate blobs and re-scan the bytes for
+  telltale secondary indicators (shell invocation, http URLs, ELF magic,
+  python exec).
+category: obfuscation
+severity: high
+author: clean-skill
+version: 1
+platforms: [all]
+scope: [text]
+patterns:
+  - type: regex
+    expression: '(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{120,}={0,2}(?![A-Za-z0-9+/])'
+    decode: base64
+    nested:
+      - type: regex
+        expression: '(?i)(curl|wget|/bin/sh|bash\s+-c|powershell|Invoke-Expression)'
+      - type: regex
+        expression: '(?i)https?://'
+      - type: regex
+        expression: '(?i)(os\.system|subprocess\.\w+|eval\s*\(|exec\s*\()'
+      - type: regex
+        expression: '\x7fELF'
+condition: any
+min_matches: 1

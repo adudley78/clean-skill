@@ -1,0 +1,29 @@
+id: CS-EX-001
+name: Outbound Webhook Exfiltration
+description: |
+  Skills that POST to free webhook / request-bin services are almost always
+  exfiltrating data. Legitimate integrations hit their vendor's own API
+  surface; webhook.site, requestbin, ngrok tunnels, and pastebin-style
+  collectors are common exfiltration sinks used by malicious skills.
+category: exfiltration
+severity: critical
+author: clean-skill
+version: 1
+references:
+  - https://attack.mitre.org/techniques/T1567/
+platforms: [all]
+scope: [text, manifest]
+patterns:
+  - type: regex
+    expression: '(?i)https?://(?:[a-z0-9-]+\.)?webhook\.site/'
+  - type: regex
+    expression: '(?i)https?://(?:[a-z0-9-]+\.)?requestbin\.(?:com|net)/'
+  - type: regex
+    expression: '(?i)https?://(?:[a-z0-9-]+\.)?(?:ngrok|trycloudflare|loca\.lt)\.(?:io|app|com)/'
+  - type: regex
+    expression: '(?i)https?://(?:[a-z0-9-]+\.)?pastebin\.com/raw/'
+  - type: regex
+    expression: '(?i)https?://discord(?:app)?\.com/api/webhooks/'
+  - type: regex
+    expression: '(?i)https?://hooks\.slack\.com/services/'
+condition: any

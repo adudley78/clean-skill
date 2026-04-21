@@ -1,0 +1,51 @@
+# Development stack for clean-skill. Brings up the API, threat-intel DB,
+# and crawler queue. The sandbox image is built separately because it is
+# invoked by the API, not by compose itself.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml up --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cleanskill
+      POSTGRES_PASSWORD: cleanskill
+      POSTGRES_DB: cleanskill
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cleanskill"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+    environment:
+      CLEAN_SKILL_DB_URL: postgresql+psycopg://cleanskill:cleanskill@postgres:5432/cleanskill
+      CLEAN_SKILL_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    # The API launches sandbox containers via the host Docker socket. This is
+    # a dev-only convenience; production should use a dedicated Docker-in-Docker
+    # host or a remote Docker API with narrow RBAC.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  pgdata:

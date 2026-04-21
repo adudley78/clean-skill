@@ -1,0 +1,28 @@
+id: CS-PI-001
+name: Instruction Override Attempt
+description: |
+  Detects classic prompt-injection phrasing that tries to override, ignore,
+  or supersede prior system instructions. These strings frequently appear
+  inside skill descriptions, tool prompts, or embedded documentation that
+  the host agent will read as part of its context.
+category: instruction_override
+severity: high
+author: clean-skill
+version: 1
+references:
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  - https://arxiv.org/abs/2302.12173
+platforms: [all]
+scope: [text, manifest]
+patterns:
+  - type: regex
+    expression: '(?i)ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)'
+  - type: regex
+    expression: '(?i)disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|context)'
+  - type: regex
+    expression: '(?i)you\s+are\s+now\s+(a|an)\s+\w+'
+  - type: regex
+    expression: '(?i)forget\s+everything\s+(you|that\s+you)\s+(know|were\s+told)'
+  - type: regex
+    expression: '(?i)new\s+system\s+prompt\s*:'
+condition: any

@@ -1,0 +1,98 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "clean-skill"
+version = "0.1.0"
+description = "Detect malicious AI skills in skills marketplaces via static + dynamic analysis."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+authors = [{ name = "Adam Dudley" }]
+keywords = ["security", "ai", "llm", "mcp", "supply-chain", "skills", "sandbox"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+
+# Core runtime deps. Pinned to tested majors; renovate can bump.
+dependencies = [
+    "pydantic>=2.7,<3.0",
+    "pydantic-settings>=2.3,<3.0",
+    "typer>=0.12,<1.0",
+    "rich>=13.7,<14.0",
+    "pyyaml>=6.0.1,<7.0",
+    "httpx>=0.27,<1.0",
+    "docker>=7.1,<8.0",
+    "detect-secrets>=1.5,<2.0",
+    "anthropic>=0.34,<1.0",
+    "openai>=1.40,<2.0",
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    "sqlalchemy>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "redis>=5.0,<6.0",
+    "rq>=1.16,<2.0",
+    "jsonschema>=4.22,<5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-cov>=5.0,<6.0",
+    "pytest-asyncio>=0.23,<1.0",
+    "ruff>=0.6,<1.0",
+    "mypy>=1.11,<2.0",
+    "types-PyYAML>=6.0,<7.0",
+]
+yara = ["yara-python>=4.5,<5.0"]
+
+[project.scripts]
+clean-skill = "clean_skill.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/clean-skill/clean-skill"
+Issues = "https://github.com/clean-skill/clean-skill/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/clean_skill"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "rules", "README.md", "LICENSE", "THREAT_MODEL.md"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "RUF"]
+# S101: assert is fine; S105: enum-value false positives on "secret_leak" etc.;
+# S108: docker tmpfs bind strings are not host tempfile usage.
+ignore = ["S101", "S105", "S108"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+"src/clean_skill/cli.py" = ["B008"]       # typer.Option() in defaults is idiomatic
+"src/clean_skill/api/main.py" = ["B008"]  # FastAPI Depends() in defaults is idiomatic
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["clean_skill"]
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["src/clean_skill"]
+branch = true

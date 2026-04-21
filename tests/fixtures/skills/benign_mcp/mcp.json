@@ -1,0 +1,10 @@
+{
+  "name": "time-server",
+  "version": "1.2.0",
+  "description": "Returns the current time in a requested timezone.",
+  "command": "python -m time_server",
+  "tools": [
+    { "name": "now", "description": "Return current timestamp." }
+  ],
+  "network": { "allow": [] }
+}

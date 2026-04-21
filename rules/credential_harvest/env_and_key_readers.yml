@@ -1,0 +1,32 @@
+id: CS-CH-001
+name: Credential / Env Harvesting
+description: |
+  Detects skills that read local credential files, environment variables, or
+  cloud metadata endpoints. A benign skill that needs a single API key will
+  request it through a declared input; code that reads ~/.aws/credentials,
+  ~/.ssh/id_rsa, or the IMDS endpoint directly is almost always harvesting.
+category: credential_harvest
+severity: critical
+author: clean-skill
+version: 1
+references:
+  - https://attack.mitre.org/techniques/T1552/
+  - https://attack.mitre.org/techniques/T1552/005/
+platforms: [all]
+scope: [text]
+patterns:
+  - type: regex
+    expression: '(?i)(~|\$HOME|/root|/home/[^/\s]+)/\.aws/credentials'
+  - type: regex
+    expression: '(?i)(~|\$HOME|/root|/home/[^/\s]+)/\.ssh/(id_rsa|id_ed25519|authorized_keys)'
+  - type: regex
+    expression: '(?i)(~|\$HOME)/\.netrc'
+  - type: regex
+    expression: '(?i)(~|\$HOME)/\.docker/config\.json'
+  - type: regex
+    expression: '(?i)https?://169\.254\.169\.254/latest/meta-data/'
+  - type: regex
+    expression: '(?i)os\.environ\s*\[\s*[\x27"](AWS_[A-Z_]+|GITHUB_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|GCP_[A-Z_]+)[\x27"]\s*\]'
+  - type: regex
+    expression: '(?i)printenv|env\s*\|\s*grep'
+condition: any

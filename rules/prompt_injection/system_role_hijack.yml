@@ -1,0 +1,26 @@
+id: CS-PI-002
+name: System Role Hijack
+description: |
+  Detects attempts to inject a fake "system" role message inside skill content
+  so the downstream LLM treats attacker-controlled text as a trusted system
+  instruction. Commonly observed as synthetic chat markup embedded in
+  documentation strings or tool output templates.
+category: prompt_injection
+severity: critical
+author: clean-skill
+version: 1
+references:
+  - https://simonwillison.net/2023/May/2/prompt-injection-explained/
+platforms: [all]
+scope: [text, manifest]
+patterns:
+  - type: regex
+    expression: '(?is)<\s*system\s*>.{0,500}</\s*system\s*>'
+  - type: regex
+    expression: '(?i)^\s*###\s*system\s*[:\n]'
+    flags: m
+  - type: regex
+    expression: '(?i)<\|im_start\|>\s*system'
+  - type: regex
+    expression: '(?i)"role"\s*:\s*"system"\s*,\s*"content"'
+condition: any
