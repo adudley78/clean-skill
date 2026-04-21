@@ -2,6 +2,7 @@
 name: dynamic-target
 version: 0.0.1
 description: Integration-test fixture; writes a file and exits.
+entrypoint: main.py
 tools: []
 allowed_hosts: []
 ---
