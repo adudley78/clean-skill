@@ -121,7 +121,12 @@ class DynamicAnalyzer:
                     security_opt=["no-new-privileges:true"]
                     if self._config.no_new_privileges
                     else [],
-                    tmpfs={"/tmp": "rw,noexec,nosuid,size=64m"},
+                    # Writable tmpfs surfaces: /tmp for scratch, audit dir
+                    # for the JSONL log (rootfs is read-only).
+                    tmpfs={
+                        "/tmp": "rw,noexec,nosuid,size=64m",
+                        "/var/log/cleanskill": "rw,nosuid,size=16m",
+                    },
                     volumes={str(bundle_dir): {"bind": "/skill", "mode": "ro"}},
                     environment={
                         "CLEAN_SKILL_PLATFORM": skill.platform.value,
@@ -212,23 +217,34 @@ class DynamicAnalyzer:
 
     @staticmethod
     def _drain_audit_log(container: Any) -> list[dict[str, Any]]:
-        """Read ``/var/log/cleanskill/audit.jsonl`` from the stopped container."""
+        """Read ``/var/log/cleanskill/audit.jsonl`` from the stopped container.
+
+        On failure (tmpfs gone, path missing, tar corrupt) we log at DEBUG
+        so integration tests can diagnose an empty event set.
+        """
         try:
             bits, _ = container.get_archive("/var/log/cleanskill/audit.jsonl")
-        except Exception:
+        except Exception as exc:
+            logger.warning("could not retrieve audit log from sandbox: %s", exc)
             return []
         buf = io.BytesIO(b"".join(bits))
         events: list[dict[str, Any]] = []
-        with tarfile.open(fileobj=buf) as tar:
-            for member in tar:
-                f = tar.extractfile(member)
-                if f is None:
-                    continue
-                for line in f.read().splitlines():
-                    try:
-                        events.append(json.loads(line))
-                    except json.JSONDecodeError:
+        try:
+            with tarfile.open(fileobj=buf) as tar:
+                for member in tar:
+                    f = tar.extractfile(member)
+                    if f is None:
                         continue
+                    raw = f.read()
+                    if not raw:
+                        logger.debug("audit log present but empty")
+                    for line in raw.splitlines():
+                        try:
+                            events.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            logger.debug("skipping non-JSON audit line: %r", line[:120])
+        except tarfile.TarError as exc:
+            logger.warning("malformed audit archive: %s", exc)
         return events
 
     @staticmethod
