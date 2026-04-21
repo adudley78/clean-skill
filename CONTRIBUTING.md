@@ -14,14 +14,30 @@ impact way to contribute is by authoring **detection rules**.
 ## Dev setup
 
 ```bash
-git clone https://github.com/clean-skill/clean-skill && cd clean-skill
+git clone https://github.com/adudley78/clean-skill && cd clean-skill
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+make install       # editable install + dev deps
 
-pytest            # unit tests
-ruff check .      # lint
-mypy              # type-check
+make test          # unit tests (fast, no Docker)
+make lint          # ruff
+make typecheck     # mypy --strict
+make check         # all three above
 ```
+
+### Running the dynamic-analysis integration test
+
+The full pipeline runs a fixture skill under strace inside a container.
+You need a Docker daemon — gVisor (`runsc`) is preferred, but the
+analyzer transparently falls back to `runc` with a warning.
+
+```bash
+make sandbox-test  # builds the image if missing, then runs the suite
+```
+
+The Makefile auto-detects Docker Desktop on macOS (CLI inside
+`/Applications/Docker.app` and the per-user socket at
+`~/.docker/run/docker.sock`). On Linux it uses whatever's on `PATH` and
+`/var/run/docker.sock`. No env vars required.
 
 ## Adding a detection rule
 

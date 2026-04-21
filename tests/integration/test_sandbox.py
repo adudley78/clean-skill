@@ -14,35 +14,30 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from clean_skill.config import get_settings
 from clean_skill.dynamic_analysis import DynamicAnalyzer
+from clean_skill.dynamic_analysis.sandbox import connect_docker
 from clean_skill.ingestion import parse as parse_skill
 
 
-def _docker_available() -> bool:
+def _docker_client() -> Any | None:
+    """Return a connected client, or None if no daemon responds.
+
+    Uses the same socket-probing logic as the production analyzer, so if
+    this test can't find Docker neither can the analyzer under test.
+    """
     try:
-        import docker
-        from docker.errors import DockerException
-    except ImportError:
-        return False
-    try:
-        client = docker.from_env()  # type: ignore[attr-defined]
-        client.ping()
-    except DockerException:
-        return False
-    return True
+        return connect_docker()
+    except Exception:
+        return None
 
 
-def _image_exists(name: str) -> bool:
+def _image_exists(client: Any, name: str) -> bool:
     try:
-        import docker
-    except ImportError:
-        return False
-    try:
-        client = docker.from_env()  # type: ignore[attr-defined]
         client.images.get(name)
     except Exception:
         return False
@@ -57,12 +52,15 @@ pytestmark = pytest.mark.integration
     reason="set CLEAN_SKILL_RUN_INTEGRATION=1 to run dynamic integration tests",
 )
 def test_sandbox_runs_fixture_end_to_end(fixtures_dir: Path) -> None:
-    if not _docker_available():
+    client = _docker_client()
+    if client is None:
         pytest.skip("docker daemon unreachable")
 
     image = get_settings().sandbox_image
-    if not _image_exists(image):
-        pytest.skip(f"sandbox image {image!r} not built; run `make sandbox` first")
+    if not _image_exists(client, image):
+        pytest.skip(
+            f"sandbox image {image!r} not built; run `make sandbox-build` first"
+        )
 
     skill = parse_skill(fixtures_dir / "dynamic_target")
     trace, findings = DynamicAnalyzer().analyze(skill)

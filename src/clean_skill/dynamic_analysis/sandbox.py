@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -41,6 +42,68 @@ from ..models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Docker socket locations we probe when DOCKER_HOST is not set.
+#
+# Ordering rationale:
+#   1. The Linux + "Allow the default Docker socket" opt-in on macOS.
+#   2. macOS Docker Desktop's per-user socket (default since 4.x). This is
+#      the case that tripped up local dev before — docker-py's ``from_env``
+#      only looks at DOCKER_HOST and ``/var/run/docker.sock``, so on a
+#      stock Docker Desktop install we'd silently report "docker daemon
+#      unreachable" and degrade to a no-op.
+#   3. Colima's default socket for users who prefer it over Docker Desktop.
+#   4. Podman's user socket (rootless). Docker API compatibility mode only.
+_HOME = Path.home()
+_DOCKER_SOCKET_CANDIDATES: tuple[str, ...] = (
+    "/var/run/docker.sock",
+    str(_HOME / ".docker" / "run" / "docker.sock"),
+    str(_HOME / ".colima" / "default" / "docker.sock"),
+    # Podman rootless socket (Docker API-compatible).
+    str(_HOME / ".local" / "share" / "containers" / "podman.sock"),
+)
+
+
+def connect_docker() -> Any:
+    """Return a connected Docker client, probing known socket locations.
+
+    Raises ``docker.errors.DockerException`` if nothing responds. Separate
+    from :class:`DynamicAnalyzer` so the integration test can share the
+    exact same discovery logic.
+    """
+    import docker
+    from docker.errors import DockerException
+
+    if os.environ.get("DOCKER_HOST"):
+        client = docker.from_env()  # type: ignore[attr-defined]
+        client.ping()
+        return client
+
+    last_exc: Exception | None = None
+    for sock in _DOCKER_SOCKET_CANDIDATES:
+        if not Path(sock).exists():
+            continue
+        try:
+            client = docker.DockerClient(base_url=f"unix://{sock}")  # type: ignore[attr-defined]
+            client.ping()
+            logger.debug("connected to docker via %s", sock)
+            return client
+        except DockerException as exc:
+            last_exc = exc
+            logger.debug("docker socket %s did not respond: %s", sock, exc)
+
+    # Fall back to docker-py's own defaults so the error message is the
+    # library's canonical one when nothing else worked.
+    try:
+        client = docker.from_env()  # type: ignore[attr-defined]
+        client.ping()
+        return client
+    except DockerException as exc:
+        if last_exc is not None:
+            raise DockerException(
+                f"no docker daemon reachable (last error: {last_exc})"
+            ) from exc
+        raise
 
 
 @dataclass
@@ -77,14 +140,13 @@ class DynamicAnalyzer:
 
     def analyze(self, skill: Skill) -> tuple[SandboxTrace, list[Finding]]:
         try:
-            import docker
+            import docker  # noqa: F401  (import used by connect_docker)
             from docker.errors import DockerException
         except ImportError:  # pragma: no cover
             return self._degraded("docker SDK not installed")
 
         try:
-            client = docker.from_env()  # type: ignore[attr-defined]
-            client.ping()
+            client = connect_docker()
         except DockerException as exc:
             return self._degraded(f"docker daemon unreachable: {exc}")
 
