@@ -3,8 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import JSON, DateTime, String, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -38,3 +48,37 @@ class KnownBadSkill(Base):
     last_seen: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class ScanResult(Base):
+    """Persisted record of one scan pipeline execution.
+
+    Written by the background scan job (``clean_skill.jobs.scan_skill``) on
+    every run — whether the verdict is clean, suspicious, malicious, or
+    error. The ``skill_hash`` column is the dedupe key used by both the
+    job-level hash-based dedup and the scheduler-level source-based dedup.
+
+    Indexes:
+      * ``ix_scan_result_skill_hash`` — dedup lookup by bundle hash
+      * ``ix_scan_result_source_scanned_at`` — scheduler's "last seen this
+        URL" lookup for the pre-enqueue rescan-window check
+    """
+
+    __tablename__ = "scan_result"
+    __table_args__ = (
+        Index("ix_scan_result_skill_hash", "skill_hash"),
+        Index("ix_scan_result_source_scanned_at", "source", "scanned_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(2048))
+    skill_hash: Mapped[str] = mapped_column(String(64))
+    verdict: Mapped[str] = mapped_column(String(32))
+    static_findings: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    dynamic_findings: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    dynamic_skipped: Mapped[bool] = mapped_column(Boolean, default=False)
+    enqueued_by: Mapped[str] = mapped_column(String(64))
+    scanned_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # Free-form because it carries tracebacks and driver errors; length
+    # bounded so a runaway exception doesn't fill the row.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

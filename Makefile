@@ -1,4 +1,4 @@
-.PHONY: install test test-integration lint typecheck fmt check sandbox-build sandbox-test sandbox clean migrate migration
+.PHONY: install test test-integration lint typecheck fmt check sandbox-build sandbox-test sandbox clean migrate migration worker scheduler dev
 
 PYTHON ?= python
 
@@ -66,3 +66,15 @@ migrate:
 ## Generate a new migration from model changes: make migration msg="your description"
 migration:
 	alembic revision --autogenerate -m "$(msg)"
+
+## Run the RQ worker against CLEAN_SKILL_REDIS_URL.
+worker:
+	python -m clean_skill.worker.entrypoint
+
+## Run the crawler scheduler.
+scheduler:
+	python -m clean_skill.crawler.scheduler
+
+## Bring up the full dev stack (Redis + worker + scheduler) in docker compose.
+dev:
+	$(DOCKER_ENV) docker compose -f docker/docker-compose.dev.yml up --build
