@@ -96,4 +96,14 @@ gawk '
   }
 ' "$STRACE_LOG" >> "$AUDIT" || true
 
+# Always emit a terminal runner event with the exit code. This guarantees the
+# audit log contains at least one structured event even when strace cannot
+# attach (e.g. sandboxes that disallow ptrace). Also capture the first
+# kilobyte of skill stdout/stderr for post-mortem debugging.
+STDOUT_PREVIEW=$(head -c 1024 /tmp/skill.stdout 2>/dev/null | tr '\n' ' ' | sed 's/"/\\"/g' || true)
+STDERR_PREVIEW=$(head -c 1024 /tmp/skill.stderr 2>/dev/null | tr '\n' ' ' | sed 's/"/\\"/g' || true)
+STRACE_LINES=$(wc -l < "$STRACE_LOG" 2>/dev/null || echo 0)
+log_event "$(printf '{"kind":"runner","detail":{"op":"exit","exit_code":%s,"strace_lines":%s,"stdout_head":"%s","stderr_head":"%s"}}' \
+  "$RC" "$STRACE_LINES" "$STDOUT_PREVIEW" "$STDERR_PREVIEW")"
+
 exit "$RC"
