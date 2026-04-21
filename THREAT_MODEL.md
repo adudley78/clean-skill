@@ -143,4 +143,8 @@ common host-escape IOCs are on the roadmap.
 ## Reporting a gap
 
 Found a malicious skill clean-skill did not flag? Please attach a minimal
-reproducer fixture and open a GitHub issue or email security@clean-skill.org.
+reproducer fixture and open a [public issue](https://github.com/adudley78/clean-skill/issues)
+— coverage gaps are not security vulnerabilities and should be discussed in
+the open. For true product vulnerabilities (sandbox escape, rule bypass
+that hides malware), use the private channel described in
+[`SECURITY.md`](./SECURITY.md).
