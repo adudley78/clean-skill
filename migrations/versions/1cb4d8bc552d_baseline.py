@@ -50,15 +50,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("bundle_sha256", name="uq_known_bad_sha"),
     )
-    op.create_index(
-        op.f("ix_known_bad_skill_bundle_sha256"),
-        "known_bad_skill",
-        ["bundle_sha256"],
-        unique=True,
-    )
-
-
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_index(op.f("ix_known_bad_skill_bundle_sha256"), table_name="known_bad_skill")
     op.drop_table("known_bad_skill")
