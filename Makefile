@@ -1,12 +1,40 @@
-.PHONY: install test lint typecheck fmt sandbox clean
+.PHONY: install test test-integration lint typecheck fmt check sandbox-build sandbox-test sandbox clean
 
 PYTHON ?= python
+
+# On macOS, Docker Desktop ships the CLI inside the .app bundle (not on
+# PATH) and exposes its daemon socket under ~/.docker/run/ unless the
+# user opts into /var/run/docker.sock. Surfacing both here means
+# `make sandbox-*` works on a stock Docker Desktop install without
+# asking contributors to fiddle with PATH or DOCKER_HOST.
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+  DOCKER_MAC_BIN_DIR := /Applications/Docker.app/Contents/Resources/bin
+  ifneq ($(wildcard $(DOCKER_MAC_BIN_DIR)/docker),)
+    # Prepend Docker.app's bin to PATH so both `docker` and its credential
+    # helpers (docker-credential-desktop, docker-compose, ...) resolve.
+    DOCKER_ENV := PATH="$(DOCKER_MAC_BIN_DIR):$$PATH"
+  endif
+  DOCKER_MAC_SOCK := $(HOME)/.docker/run/docker.sock
+  ifneq ($(wildcard $(DOCKER_MAC_SOCK)),)
+    DOCKER_ENV += DOCKER_HOST=unix://$(DOCKER_MAC_SOCK)
+  endif
+endif
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
 
 test:
 	pytest -q
+
+# Full dynamic integration: builds the sandbox image if missing, then
+# runs the gVisor integration suite. Falls back to runc with a warning
+# on hosts without gVisor (macOS Docker Desktop, unprivileged runners).
+test-integration: sandbox-build
+	$(DOCKER_ENV) \
+	CLEAN_SKILL_RUN_INTEGRATION=1 \
+	CLEAN_SKILL_SANDBOX_IMAGE=cleanskill/sandbox:latest \
+	pytest -v -m integration tests/integration
 
 lint:
 	ruff check .
@@ -18,8 +46,15 @@ fmt:
 typecheck:
 	mypy
 
-sandbox:
-	docker build -f docker/sandbox.Dockerfile -t cleanskill/sandbox:latest .
+check: lint typecheck test
+
+sandbox-build:
+	$(DOCKER_ENV) docker build -f docker/sandbox.Dockerfile -t cleanskill/sandbox:latest .
+
+sandbox-test: test-integration
+
+# Legacy alias — older docs refer to `make sandbox`.
+sandbox: sandbox-build
 
 clean:
 	rm -rf build dist *.egg-info .pytest_cache .mypy_cache .ruff_cache htmlcov

@@ -22,21 +22,27 @@ generic JSON/YAML tool manifest.
 
 ## Install
 
-Requires Python 3.11+. Docker + gVisor (`runsc`) are required for dynamic
-analysis; static analysis works without them.
+Requires Python 3.11+. Dynamic analysis requires Docker; gVisor (`runsc`)
+is preferred but the analyzer transparently falls back to `runc` with a
+warning when gVisor isn't installed. Static analysis works without a
+container runtime at all.
 
 ```bash
-git clone https://github.com/clean-skill/clean-skill && cd clean-skill
+git clone https://github.com/adudley78/clean-skill && cd clean-skill
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+make install
 cp .env.example .env.local    # fill in API keys for LLM-as-judge
 ```
 
-Build the sandbox image (optional; only needed for `--dynamic`):
+Build the sandbox image (only needed for `--dynamic` or `make sandbox-test`):
 
 ```bash
-docker build -f docker/sandbox.Dockerfile -t cleanskill/sandbox:latest .
+make sandbox-build
 ```
+
+The Makefile auto-detects Docker Desktop on macOS (CLI inside the .app
+bundle and the per-user socket at `~/.docker/run/docker.sock`), so the
+dynamic pipeline works without setting `DOCKER_HOST` by hand.
 
 ## Quickstart
 
@@ -126,6 +132,33 @@ Documented in [`THREAT_MODEL.md`](./THREAT_MODEL.md). In short, clean-skill
 addresses five attack classes: prompt injection, obfuscated payloads,
 outbound exfiltration, credential / host-data theft, and sandbox escape via
 tool abuse.
+
+## Database migrations
+
+clean-skill uses [Alembic](https://alembic.sqlalchemy.org/) for schema migrations against
+the threat-intel PostgreSQL store. Set the database URL before running any migration command:
+
+```bash
+export CLEAN_SKILL_DB_URL=postgresql+psycopg://user:pass@localhost/cleanskill
+```
+
+Apply all pending migrations:
+
+```bash
+alembic upgrade head
+# or: make migrate
+```
+
+Generate a new migration after changing models in `src/clean_skill/threat_intel/db.py`:
+
+```bash
+alembic revision --autogenerate -m "describe your change"
+# or: make migration msg="describe your change"
+```
+
+> **Note:** Migrations run automatically at FastAPI startup. If `CLEAN_SKILL_DB_URL` is
+> not set, startup skips migrations and logs a warning — the API still starts normally for
+> environments without a database (e.g. CI static-analysis runs).
 
 ## Project status
 
