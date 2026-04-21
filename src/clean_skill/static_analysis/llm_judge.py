@@ -129,10 +129,10 @@ def judge(skill: Skill) -> list[Finding]:
     model = settings.judge_model
 
     if "claude" in model.lower() and settings.anthropic_api_key:
-        def call(s, u):
+        def call(s: str, u: str) -> str:
             return _call_anthropic(s, u, model, settings.anthropic_api_key or "")
     elif settings.openai_api_key:
-        def call(s, u):
+        def call(s: str, u: str) -> str:
             return _call_openai(s, u, model, settings.openai_api_key or "")
     else:
         logger.info("LLM judge disabled: no API key configured")

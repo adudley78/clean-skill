@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -35,7 +35,7 @@ class Pattern(BaseModel):
 
     @field_validator("expression")
     @classmethod
-    def _validate_regex(cls, v: str | None, info) -> str | None:  # type: ignore[no-untyped-def]
+    def _validate_regex(cls, v: str | None) -> str | None:
         if v is None:
             return v
         try:
@@ -58,9 +58,11 @@ class Rule(BaseModel):
     author: str
     version: int = 1
     references: list[str] = Field(default_factory=list)
-    platforms: list[Platform | Literal["all"]] = Field(default_factory=lambda: ["all"])
+    platforms: list[Platform | Literal["all"]] = Field(
+        default_factory=lambda: cast("list[Platform | Literal['all']]", ["all"])
+    )
     scope: list[Literal["text", "manifest", "filenames"]] = Field(
-        default_factory=lambda: ["text"]
+        default_factory=lambda: cast("list[Literal['text', 'manifest', 'filenames']]", ["text"])
     )
     patterns: list[Pattern]
     condition: Literal["any", "all"] = "any"

@@ -79,13 +79,13 @@ class DynamicAnalyzer:
 
     def analyze(self, skill: Skill) -> tuple[SandboxTrace, list[Finding]]:
         try:
-            import docker  # type: ignore[import-untyped]
-            from docker.errors import DockerException  # type: ignore[import-untyped]
+            import docker
+            from docker.errors import DockerException
         except ImportError:  # pragma: no cover
             return self._degraded("docker SDK not installed")
 
         try:
-            client = docker.from_env()
+            client = docker.from_env()  # type: ignore[attr-defined]
             client.ping()
         except DockerException as exc:
             return self._degraded(f"docker daemon unreachable: {exc}")

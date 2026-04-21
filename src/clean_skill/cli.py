@@ -52,7 +52,8 @@ _SEVERITY_COLOR = {
 def _fetch_remote(url: str) -> Path:
     """Download a remote skill to a temp dir and return the local path."""
     tmp = Path(tempfile.mkdtemp(prefix="cleanskill-dl-"))
-    target = tmp / url.rsplit("/", 1)[-1] or "manifest"
+    filename = url.rsplit("/", 1)[-1] or "manifest"
+    target = tmp / filename
     with httpx.Client(follow_redirects=True, timeout=30.0) as client:
         resp = client.get(url)
         resp.raise_for_status()

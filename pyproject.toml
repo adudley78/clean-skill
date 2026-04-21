@@ -88,6 +88,17 @@ strict = true
 packages = ["clean_skill"]
 mypy_path = "src"
 
+# Third-party packages that ship without type stubs. We still get full
+# type-checking on our own code that uses them.
+[[tool.mypy.overrides]]
+module = [
+    "docker",
+    "docker.*",
+    "rq",
+    "rq.*",
+]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"

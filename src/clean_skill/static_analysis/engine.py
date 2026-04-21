@@ -50,7 +50,7 @@ class StaticAnalyzer:
 
     @staticmethod
     def _rule_applies(rule: Rule, platform: Platform) -> bool:
-        return "all" in rule.platforms or platform in rule.platforms  # type: ignore[operator]
+        return "all" in rule.platforms or platform in rule.platforms
 
     @staticmethod
     def _scope_text(skill: Skill, scope: str) -> str:

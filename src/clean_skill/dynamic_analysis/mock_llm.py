@@ -57,9 +57,12 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b"{}"
         try:
-            return json.loads(raw)
+            parsed: Any = json.loads(raw)
         except json.JSONDecodeError:
             return {"_raw": raw.decode("utf-8", errors="replace")}
+        if isinstance(parsed, dict):
+            return parsed
+        return {"_value": parsed}
 
     def do_POST(self) -> None:
         body = self._read_body()
