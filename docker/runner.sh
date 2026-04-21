@@ -75,20 +75,23 @@ fi
 
 log_event "$(printf '{"kind":"runner","detail":{"msg":"exec","entry":"%s"}}' "$ABS")"
 
-# Choose interpreter based on extension; fall back to direct exec for shebanged scripts.
+# Choose interpreter based on extension. Build argv via `set --` so the
+# exec path and skill path stay properly quoted end-to-end — wrapping in
+# `sh -c "$CMD"` loses quoting across the subshell boundary and
+# previously caused Python to be invoked with the empty string (and then
+# /skill) instead of the real script.
 case "$ABS" in
-  *.py) CMD='python "$ABS"' ;;
-  *.sh) CMD='sh "$ABS"' ;;
-  *)    CMD='"$ABS"' ;;
+  *.py) set -- python "$ABS" ;;
+  *.sh) set -- sh "$ABS" ;;
+  *)    set -- "$ABS" ;;
 esac
 
 # 3) strace filters: file writes + process spawns + outbound connects.
 #    We append a single JSON line per interesting syscall to the audit log.
 STRACE_LOG=$(mktemp)
 
-# shellcheck disable=SC2086
 strace -f -qq -e trace=openat,connect,execve -o "$STRACE_LOG" \
-  sh -c "$CMD" </dev/null >/tmp/skill.stdout 2>/tmp/skill.stderr
+  "$@" </dev/null >/tmp/skill.stdout 2>/tmp/skill.stderr
 RC=$?
 
 gawk '
