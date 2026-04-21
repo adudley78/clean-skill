@@ -13,7 +13,7 @@
 #   2) invokes the skill's declared entrypoint under strace (process + fs events)
 #   3) flushes the audit log before exiting
 
-FROM python:3.12-slim-bookworm AS base
+FROM python:3.14-slim-bookworm AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
