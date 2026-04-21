@@ -77,5 +77,6 @@ severity and promote once real-world telemetry justifies it.
 ## Community
 
 - Discussions: GitHub Discussions tab.
-- Security issues: email security@clean-skill.org — do **not** file a
-  public issue for unpatched vulnerabilities.
+- Security issues: see [`SECURITY.md`](./SECURITY.md). Report privately via
+  GitHub Security Advisories — do **not** file a public issue for unpatched
+  vulnerabilities.
