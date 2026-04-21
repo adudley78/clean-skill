@@ -99,6 +99,10 @@ class DynamicAnalyzer:
             bundle_dir.mkdir()
             log_dir = Path(tmp) / "logs"
             log_dir.mkdir()
+            # Container user (uid 10001) needs write access to the bind
+            # mount. The host tempdir was created with 0755 by default, so
+            # uid 10001 could cd in but not create files.
+            log_dir.chmod(0o0777)
             self._materialize(skill, bundle_dir)
 
             started = datetime.now(UTC)
@@ -110,7 +114,11 @@ class DynamicAnalyzer:
             try:
                 container = client.containers.run(
                     image=self._config.image,
-                    command=["/opt/clean-skill/runner.sh", "/skill"],
+                    # The image's ENTRYPOINT is `runner.sh`; `command` supplies
+                    # only its arguments (the skill mount point). Prepending
+                    # the script path here would cause the runner to re-exec
+                    # itself with the wrong $1.
+                    command=["/skill"],
                     detach=True,
                     network_disabled=(self._config.network == "none"),
                     runtime=runtime,
