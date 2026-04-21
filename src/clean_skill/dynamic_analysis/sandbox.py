@@ -21,10 +21,8 @@ This module only orchestrates the container lifecycle and parses its output.
 
 from __future__ import annotations
 
-import io
 import json
 import logging
-import tarfile
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -99,6 +97,8 @@ class DynamicAnalyzer:
         with tempfile.TemporaryDirectory(prefix="cleanskill-") as tmp:
             bundle_dir = Path(tmp) / "bundle"
             bundle_dir.mkdir()
+            log_dir = Path(tmp) / "logs"
+            log_dir.mkdir()
             self._materialize(skill, bundle_dir)
 
             started = datetime.now(UTC)
@@ -121,13 +121,16 @@ class DynamicAnalyzer:
                     security_opt=["no-new-privileges:true"]
                     if self._config.no_new_privileges
                     else [],
-                    # Writable tmpfs surfaces: /tmp for scratch, audit dir
-                    # for the JSONL log (rootfs is read-only).
-                    tmpfs={
-                        "/tmp": "rw,noexec,nosuid,size=64m",
-                        "/var/log/cleanskill": "rw,nosuid,size=16m",
+                    # /tmp stays tmpfs (ephemeral scratch for the skill).
+                    tmpfs={"/tmp": "rw,noexec,nosuid,size=64m"},
+                    # Bundle is RO; the audit log is a host-side bind mount
+                    # so the file survives container teardown (tmpfs
+                    # contents evaporate when the container's mount
+                    # namespace exits).
+                    volumes={
+                        str(bundle_dir): {"bind": "/skill", "mode": "ro"},
+                        str(log_dir): {"bind": "/var/log/cleanskill", "mode": "rw"},
                     },
-                    volumes={str(bundle_dir): {"bind": "/skill", "mode": "ro"}},
                     environment={
                         "CLEAN_SKILL_PLATFORM": skill.platform.value,
                         "CLEAN_SKILL_ENTRYPOINT": skill.entrypoint or "",
@@ -143,7 +146,7 @@ class DynamicAnalyzer:
                 timed_out = True
                 container.kill()
             finally:
-                raw_events = self._drain_audit_log(container)
+                raw_events = self._drain_audit_log_host(log_dir)
                 try:
                     container.remove(force=True)
                 except Exception as exc:
@@ -216,35 +219,26 @@ class DynamicAnalyzer:
                 target.write_text(sf.content, encoding="utf-8")
 
     @staticmethod
-    def _drain_audit_log(container: Any) -> list[dict[str, Any]]:
-        """Read ``/var/log/cleanskill/audit.jsonl`` from the stopped container.
+    def _drain_audit_log_host(log_dir: Path) -> list[dict[str, Any]]:
+        """Read ``audit.jsonl`` from the host-side bind-mounted log dir.
 
-        On failure (tmpfs gone, path missing, tar corrupt) we log at DEBUG
-        so integration tests can diagnose an empty event set.
+        Reading via the host FS (rather than ``container.get_archive``) means
+        events survive container teardown and we don't need the container
+        still alive when we collect them.
         """
-        try:
-            bits, _ = container.get_archive("/var/log/cleanskill/audit.jsonl")
-        except Exception as exc:
-            logger.warning("could not retrieve audit log from sandbox: %s", exc)
+        path = log_dir / "audit.jsonl"
+        if not path.exists():
+            logger.warning("audit log missing after sandbox run: %s", path)
             return []
-        buf = io.BytesIO(b"".join(bits))
         events: list[dict[str, Any]] = []
-        try:
-            with tarfile.open(fileobj=buf) as tar:
-                for member in tar:
-                    f = tar.extractfile(member)
-                    if f is None:
-                        continue
-                    raw = f.read()
-                    if not raw:
-                        logger.debug("audit log present but empty")
-                    for line in raw.splitlines():
-                        try:
-                            events.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            logger.debug("skipping non-JSON audit line: %r", line[:120])
-        except tarfile.TarError as exc:
-            logger.warning("malformed audit archive: %s", exc)
+        raw = path.read_bytes()
+        if not raw:
+            logger.debug("audit log present but empty")
+        for line in raw.splitlines():
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                logger.debug("skipping non-JSON audit line: %r", line[:120])
         return events
 
     @staticmethod
