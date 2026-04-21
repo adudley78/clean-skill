@@ -1,0 +1,60 @@
+# Development stack for the async pipeline.
+#
+# Brings up Redis + an RQ worker + the crawl scheduler. No database by
+# default — the worker will log a warning and run happily against Redis
+# alone; add CLEAN_SKILL_DB_URL to the env block to enable persistence.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.dev.yml up --build
+#   docker compose -f docker/docker-compose.dev.yml logs -f worker
+#
+# Intentionally uses image: python:3.12-slim + volume mount rather than
+# a custom image so contributors can iterate on code without rebuilds.
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    image: python:3.12-slim
+    depends_on:
+      redis:
+        condition: service_healthy
+    working_dir: /app
+    volumes:
+      - ../:/app:cached
+    environment:
+      CLEAN_SKILL_REDIS_URL: "redis://redis:6379/0"
+      # DB deliberately unset — worker should log a warning, not crash.
+      # CLEAN_SKILL_DB_URL: "postgresql+psycopg://user:pass@postgres/cleanskill"
+      CLEAN_SKILL_DYNAMIC_ENABLED: "false"
+      PYTHONUNBUFFERED: "1"
+    command:
+      - bash
+      - -lc
+      - "pip install -e . && python -m clean_skill.worker.entrypoint"
+
+  scheduler:
+    image: python:3.12-slim
+    depends_on:
+      redis:
+        condition: service_healthy
+    working_dir: /app
+    volumes:
+      - ../:/app:cached
+    environment:
+      CLEAN_SKILL_REDIS_URL: "redis://redis:6379/0"
+      # Tight interval for dev; override to 6h in prod.
+      CLEAN_SKILL_CRAWL_INTERVAL_HOURS: "1"
+      PYTHONUNBUFFERED: "1"
+    command:
+      - bash
+      - -lc
+      - "pip install -e . && python -m clean_skill.crawler.scheduler"

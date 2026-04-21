@@ -50,6 +50,20 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8080, alias="CLEAN_SKILL_API_PORT")
     api_token: str | None = Field(default=None, alias="CLEAN_SKILL_API_TOKEN")
 
+    # --- Background pipeline ---------------------------------------------
+    # Rescan window in days: the job skips a pipeline run when the same
+    # bundle hash has been scanned more recently than this. 7d is a
+    # compromise between catching fast-moving threats and thrashing the
+    # worker pool on static community skills.
+    rescan_days: int = Field(default=7, alias="CLEAN_SKILL_RESCAN_DAYS")
+    # Crawl interval for the scheduler's recurring tick. Default 6h keeps
+    # registry load polite while catching newly-published skills before
+    # they accumulate install counts.
+    crawl_interval_hours: int = Field(default=6, alias="CLEAN_SKILL_CRAWL_INTERVAL_HOURS")
+    # Whether dynamic analysis is enabled in the background pipeline.
+    # Set to false on hosts without Docker (static-only CI, edge deploys).
+    dynamic_enabled: bool = Field(default=True, alias="CLEAN_SKILL_DYNAMIC_ENABLED")
+
 
 _settings: Settings | None = None
 
