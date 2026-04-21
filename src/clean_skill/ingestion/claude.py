@@ -48,7 +48,13 @@ class ClaudeSkillParser(SkillParser):
             name=str(manifest.get("name") or root.name),
             version=str(manifest.get("version")) if manifest.get("version") else None,
             description=manifest.get("description"),
-            entrypoint="SKILL.md",
+            # Claude skills have no required executable entrypoint; SKILL.md
+            # is instructional prose. When the author ships code alongside
+            # (e.g. `main.py`) they can declare it explicitly via an
+            # `entrypoint:` key in the frontmatter so the dynamic analyzer
+            # knows what to execute. Otherwise we fall back to SKILL.md, and
+            # the runner's file-type check will skip non-executable targets.
+            entrypoint=str(manifest.get("entrypoint") or "SKILL.md"),
             declared_permissions=list(manifest.get("permissions") or []),
             declared_network=list(manifest.get("allowed_hosts") or []),
             declared_tools=list(manifest.get("tools") or manifest.get("allowed-tools") or []),

@@ -35,6 +35,12 @@ if [ -n "${CLEAN_SKILL_ENTRYPOINT:-}" ]; then
     /*) [ -f "$CLEAN_SKILL_ENTRYPOINT" ] && ABS="$CLEAN_SKILL_ENTRYPOINT" ;;
     *)  [ -f "$SKILL_DIR/$CLEAN_SKILL_ENTRYPOINT" ] && ABS="$SKILL_DIR/$CLEAN_SKILL_ENTRYPOINT" ;;
   esac
+  # Skip instructional/documentation files — the runner needs something
+  # the shell can actually exec. Claude's SKILL.md and similar fall in
+  # this bucket; auto-discovery below will find the real code file.
+  case "$ABS" in
+    *.md|*.txt|*.rst|*.json) ABS="" ;;
+  esac
 fi
 
 if [ -z "$ABS" ]; then
